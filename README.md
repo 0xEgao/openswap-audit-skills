@@ -19,10 +19,10 @@ pi
 At the Pi prompt, select the configured model with `/model` if needed, then run:
 
 ```text
-/openswap-audit Audit recent commits against origin/master, including dirty changes.
+/openswap-audit --base=origin/master Audit recent commits, including dirty changes.
 ```
 
-The command also accepts a release or module scope, for example `/openswap-audit Release audit of all P0 lanes and enabled Lightning` or `/openswap-audit Audit recent watchtower changes and their wallet recovery boundary`.
+Use `/openswap-audit --plan` to preview the base, scope, changed-path count, and roles without starting a model. Use `/openswap-audit-stop` to cancel a running reviewer wave. Use `--release` for B–H plus I/J, `--baseline` for a rotating P0 pass, or `--parallel=2` when the model backend can handle two requests. A module request such as `/openswap-audit Audit recent watchtower changes` adds that boundary to the diff-based routing.
 
 While editing this sibling repository locally, you can load it without installing or pushing:
 
@@ -33,7 +33,9 @@ pi -e ../openswap-audit-skills
 
 To install only for the OpenSwap checkout, run `pi install --local git:github.com/0xEgao/openswap-audit-skills` there. Project-local packages load after project trust is granted. Run `pi update --extensions` to update the managed Git package. See [Pi package documentation](https://pi.dev/docs/latest/packages) for scope and update behavior.
 
-`/openswap-audit` makes the current Pi session role **A**, the coordinator. It reads the exact checkout and CI assertions, chooses affected reviewers from B–H, then invokes the package's `openswap_audit_agents` tool in small waves. I (code quality) and J (novel scenario design) run on change audits. The tool starts separate read-only Pi processes with the selected model and returns their reports. It runs one worker at a time by default for a single local model backend; the coordinator can request up to four parallel workers when the backend supports them. L challenges serious findings. K runs only a chosen new scenario in a fresh detached worktree through `openswap_audit_scenario`; source changes must be committed so K tests the audited HEAD (the project-local `.pi/settings.json` is exempt). The worktree and patch are kept for inspection. The coordinator produces the dated audit and coverage ledger in the Pi conversation.
+`/openswap-audit` itself captures `HEAD`, the merge base, committed and dirty paths, recent commit summaries, and a patch for the scenario designer. Its deterministic router launches the initial B–H specialists selected by changed paths and cross-module boundaries, plus I (code quality) and J (novel scenario gaps). With no changed paths it runs a B/E/F baseline; release mode runs B–G and H when the Lightning module exists. Each reviewer is a separate read-only Pi process using the selected model. They run sequentially by default for one local model backend, or up to four at a time with `--parallel=N`.
+
+Only after those processes finish does the current Pi session act as **A**, the coordinator. It receives the reports, checks CI and any routing gaps, and may call `openswap_audit_agents` for extra reviewers or L to challenge serious claims. K runs only a chosen new scenario in a fresh detached worktree through `openswap_audit_scenario`; source changes must be committed so K tests the audited HEAD (the project-local `.pi/settings.json` is exempt). The worktree and patch are kept for inspection. The coordinator produces the dated audit and coverage ledger in the Pi conversation. The initial worker launch is code-driven; interpretation and optional K/L follow-ups remain evidence-driven.
 
 The review workers use Pi's read/search tools. K can edit and run focused regtest commands in its worktree. Pi extensions and tools run with your account's permissions; the worktree is [not an OS sandbox](https://pi.dev/docs/latest/security). Use a container or restricted account if auditing untrusted code. A selected model, reachable backend, and regtest dependencies are prerequisites for model calls and scenario execution. A missing dependency is reported as blocked, not as a passing audit.
 
@@ -43,24 +45,25 @@ The source paths below refer to the target OpenSwap checkout. Its current Git st
 
 ```mermaid
 flowchart LR
-    Inputs["Commits, diff, CI, prior coverage"] --> A["A: Coordinator"]
-    Skill["SKILL.md and references"] -.-> A
-    A --> Safety["B-F: Protocol, peers, wallet, chain"]
-    A --> Feature["G-H: Offers, privacy, Lightning"]
-    A --> Quality["I: Code quality"]
-    A --> Design["J: Scenario gap designer"]
-    Safety --> Ledger["Evidence ledger"]
-    Feature --> Ledger
-    Quality --> Ledger
-    Design -->|Novel cases| A
-    A -->|Chosen case| Execute["K: Regtest executor"]
-    Execute --> Ledger
-    Ledger --> Challenge["L: Independent challenger"]
+    Inputs["Git commits and dirty diff"] --> Router["Pi command: snapshot and deterministic routing"]
+    Skill["SKILL.md and role briefs"] -.-> Router
+    Router --> Safety["B-F: Protocol, peers, wallet, chain"]
+    Router --> Feature["G-H: Offers, privacy, Lightning"]
+    Router --> Quality["I: Code quality"]
+    Router --> Design["J: Scenario gap designer"]
+    Safety --> Reports["Isolated worker reports"]
+    Feature --> Reports
+    Quality --> Reports
+    Design --> Reports
+    Reports --> A["A: Coordinator"]
+    A -->|Serious candidate| Challenge["L: Independent challenger"]
+    A -->|Chosen novel case| Execute["K: Regtest executor"]
     Challenge --> A
-    A --> Report["Dated audit brief"]
+    Execute --> A
+    A --> Report["Dated audit and coverage ledger"]
 ```
 
-The [Pi extension](extensions/openswap-audit.mjs) starts separate reviewer processes when the coordinator calls its tool. Markdown defines the roles, routing, and handoffs. Each worker receives the same Git snapshot and a distinct question. The coordinator runs waves with concurrency limited to suit the selected model backend.
+The [Pi extension](extensions/openswap-audit.mjs) launches the first reviewer wave directly from `/openswap-audit`, using the [Git router](extensions/routing.mjs). Markdown supplies each role brief. Every worker receives the same snapshot and a distinct assignment. The coordinator can launch additional waves after reading the reports.
 
 ## What the specialists review
 
@@ -149,7 +152,9 @@ The ledger distinguishes **existing CI assertion**, **reviewed without a finding
 | File | Purpose |
 | --- | --- |
 | [package.json](package.json) | Pi package manifest: skill and extension |
-| [extensions/openswap-audit.mjs](extensions/openswap-audit.mjs) | `/openswap-audit` command and isolated reviewer/scenario tools |
+| [extensions/openswap-audit.mjs](extensions/openswap-audit.mjs) | Deterministic `/openswap-audit` launch and follow-up reviewer/scenario tools |
+| [extensions/routing.mjs](extensions/routing.mjs) | Git snapshot, scope parsing, and changed-path role routing |
+| [tests/routing.test.mjs](tests/routing.test.mjs) | Routing checks for fund-safety, recovery, release, and baseline scopes |
 | [skills/openswap-audit/SKILL.md](skills/openswap-audit/SKILL.md) | Audit entry point and coordinator workflow |
 | [skills/openswap-audit/references/agent-briefs.md](skills/openswap-audit/references/agent-briefs.md) | A-L specialist assignments |
 | [skills/openswap-audit/references/module-priorities.md](skills/openswap-audit/references/module-priorities.md) | Module priority and dispatch rules |
