@@ -7,6 +7,14 @@ description: Plan and run a recurring, risk-prioritized multi-agent security and
 
 Use this skill for a branch, PR, release, module, or recurring OpenSwap/Coinswap audit. A `coinswap` path may resolve to the `openswap` checkout; identify the actual Git root. Read the protocol specification and relevant repository documentation before asserting protocol invariants. The [repository README](https://github.com/0xEgao/openswap-audit-skills#readme) explains the architecture and invocation. Work against the target OpenSwap checkout, not this instruction repository.
 
+## Pi package activation
+
+When this skill is installed as the `openswap-audit-skills` Pi package, run `/openswap-audit` from the OpenSwap source checkout. The package loads this skill and exposes `openswap_audit_agents` and `openswap_audit_scenario`; the command starts role A in the current Pi session. `/skill:openswap-audit` only loads instructions, so for an actual multi-agent audit use the package command or call the tools explicitly.
+
+Role A must capture the Git/CI snapshot, select affected roles from the routing table, then call `openswap_audit_agents` with a shared `context` and 1–4 bounded role assignments per wave. Do not merely describe the roles. Include I and J for a change audit; add B–H by changed invariant and cross-boundary risk. Each call starts separate read-only Pi processes using the current selected model and stores full worker reports in a temporary directory. Review their reports, commission L on serious claims, and integrate the evidence. For a selected novel scenario, call `openswap_audit_scenario` with J's exact brief only when source changes are committed (project-local `.pi/settings.json` is exempt); it creates a separate detached worktree and retains the test patch and report. Keep K's result distinct from CI status. If the model or test dependencies are unavailable, report the blocked lane rather than claiming coverage.
+
+The coordinator is a working agent, not an extra spawned process. It may use `bash` to inspect Git, CI configuration, and protocol documentation. Worker roles B–J and L have only Pi read/search tools; K additionally has shell and edit tools in its disposable worktree. The worktree is source isolation, not an operating-system sandbox.
+
 ## 1. Capture the audit snapshot
 
 - Record date, physical repository root, `HEAD`, base ref and merge base, staged/unstaged/untracked changes, enabled features, and available test dependencies. Honor a user-supplied PR/range. Otherwise prefer the merge base with `upstream/master`, then `origin/master`, then the local default branch. Include both `base...HEAD` and working-tree changes; state if the tree is dirty.
@@ -20,7 +28,7 @@ Read [module priorities](references/module-priorities.md), then issue bounded as
 
 Select roles by **changed invariant**, not by file count or a fixed agent count. Normally use a coordinator, at least one affected money-safety specialist, a scenario gap designer, and a code-quality reviewer. Add a separate scenario executor only when there is a specific worthwhile new case or reproduction. Add an independent challenger for serious candidates. Route cross-boundary changes to complementary specialists; the coordinator reconciles their conclusions. For a release audit, run all applicable lanes in waves. With limited concurrency, perform the same assignments sequentially.
 
-The Markdown files define instructions; they do **not** create agents by themselves. In Pi, Codex, or another runner, use an actual delegation/extension/process mechanism to create isolated workers. Each worker gets a distinct brief and returns evidence to the coordinator. Loading `/skill:openswap-audit` alone does not spawn them.
+The Markdown files define each assignment. In Pi, the package extension creates isolated workers when role A calls `openswap_audit_agents`; the skill alone does not spawn them. In another runner, use its delegation mechanism and pass the same bounded briefs. Each worker returns evidence to the coordinator.
 
 ## 3. Seek coverage gaps created by recent changes
 

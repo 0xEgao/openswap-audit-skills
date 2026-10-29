@@ -1,0 +1,15 @@
+{
+  "name": "openswap-audit-skills",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pi-native multi-agent audit skill and dispatcher for OpenSwap",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./extensions/openswap-audit.mjs"],
+    "skills": ["./skills/openswap-audit"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

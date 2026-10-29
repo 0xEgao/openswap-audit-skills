@@ -4,11 +4,40 @@
 
 This workflow combines code review with deliberately chosen regtest scenarios. It starts from recent commits and the tests CI already runs, then asks what failure boundary is still unproved. A clean CI run is useful evidence for its exact assertions; it is not a substitute for checking adversarial behavior, persistence, recovery, and cross-module state.
 
-## Use with an OpenSwap checkout
+## Run with Pi
 
-Keep the OpenSwap source checkout separate from this instruction repository. Run the audit with the OpenSwap checkout as the working tree and make the skill directory available to your agent runner. A runner that discovers project skills can copy or link the skills/openswap-audit directory into its project skill directory; another runner can load SKILL.md directly and dispatch the role briefs. The runner creates agents and passes them assignments; these Markdown files do not launch workers.
+Install [Pi](https://pi.dev/docs/latest/quickstart) and configure a model first. Pi supports local open-source models through [llama.cpp or a compatible endpoint](https://pi.dev/docs/latest/models#connect-local-models). This repository is a [Pi package](https://pi.dev/docs/latest/packages): one load supplies both the skill and the extension that creates independent reviewer processes.
 
-The source paths shown below refer to the target OpenSwap checkout. Its current Git state, CI workflow, integration-test README, and tests are the authority for each audit, even when this documentation uses an earlier example.
+Install this repository as a Pi package, then open Pi in the OpenSwap source checkout:
+
+```sh
+pi install git:github.com/0xEgao/openswap-audit-skills
+cd /path/to/openswap
+pi
+```
+
+At the Pi prompt, select the configured model with `/model` if needed, then run:
+
+```text
+/openswap-audit Audit recent commits against origin/master, including dirty changes.
+```
+
+The command also accepts a release or module scope, for example `/openswap-audit Release audit of all P0 lanes and enabled Lightning` or `/openswap-audit Audit recent watchtower changes and their wallet recovery boundary`.
+
+While editing this sibling repository locally, you can load it without installing or pushing:
+
+```sh
+cd /path/to/openswap
+pi -e ../openswap-audit-skills
+```
+
+To install only for the OpenSwap checkout, run `pi install --local git:github.com/0xEgao/openswap-audit-skills` there. Project-local packages load after project trust is granted. Run `pi update --extensions` to update the managed Git package. See [Pi package documentation](https://pi.dev/docs/latest/packages) for scope and update behavior.
+
+`/openswap-audit` makes the current Pi session role **A**, the coordinator. It reads the exact checkout and CI assertions, chooses affected reviewers from B–H, then invokes the package's `openswap_audit_agents` tool in small waves. I (code quality) and J (novel scenario design) run on change audits. The tool starts separate read-only Pi processes with the selected model and returns their reports. It runs one worker at a time by default for a single local model backend; the coordinator can request up to four parallel workers when the backend supports them. L challenges serious findings. K runs only a chosen new scenario in a fresh detached worktree through `openswap_audit_scenario`; source changes must be committed so K tests the audited HEAD (the project-local `.pi/settings.json` is exempt). The worktree and patch are kept for inspection. The coordinator produces the dated audit and coverage ledger in the Pi conversation.
+
+The review workers use Pi's read/search tools. K can edit and run focused regtest commands in its worktree. Pi extensions and tools run with your account's permissions; the worktree is [not an OS sandbox](https://pi.dev/docs/latest/security). Use a container or restricted account if auditing untrusted code. A selected model, reachable backend, and regtest dependencies are prerequisites for model calls and scenario execution. A missing dependency is reported as blocked, not as a passing audit.
+
+The source paths below refer to the target OpenSwap checkout. Its current Git state, CI workflow, integration-test README, and tests are the authority for each audit, even when this documentation uses an earlier example.
 
 ## Architecture at a glance
 
@@ -31,7 +60,7 @@ flowchart LR
     A --> Report["Dated audit brief"]
 ```
 
-The **runner** creates and coordinates workers: Codex delegation, a Pi extension, or separate Pi processes can fill that role. Markdown defines the briefs and handoffs; loading the skill in one Pi session does not itself create agents. Use as many workers as the environment can support, in waves if needed. Each worker receives the same Git snapshot and a distinct question. A single agent can follow the same flow sequentially.
+The [Pi extension](extensions/openswap-audit.mjs) starts separate reviewer processes when the coordinator calls its tool. Markdown defines the roles, routing, and handoffs. Each worker receives the same Git snapshot and a distinct question. The coordinator runs waves with concurrency limited to suit the selected model backend.
 
 ## What the specialists review
 
@@ -119,6 +148,8 @@ The ledger distinguishes **existing CI assertion**, **reviewed without a finding
 
 | File | Purpose |
 | --- | --- |
+| [package.json](package.json) | Pi package manifest: skill and extension |
+| [extensions/openswap-audit.mjs](extensions/openswap-audit.mjs) | `/openswap-audit` command and isolated reviewer/scenario tools |
 | [skills/openswap-audit/SKILL.md](skills/openswap-audit/SKILL.md) | Audit entry point and coordinator workflow |
 | [skills/openswap-audit/references/agent-briefs.md](skills/openswap-audit/references/agent-briefs.md) | A-L specialist assignments |
 | [skills/openswap-audit/references/module-priorities.md](skills/openswap-audit/references/module-priorities.md) | Module priority and dispatch rules |
@@ -127,7 +158,7 @@ The ledger distinguishes **existing CI assertion**, **reviewed without a finding
 
 All links in this README are relative to the repository and work when the repository is browsed on GitHub. Mermaid blocks provide the diagrams; the adjacent text and tables carry the same structure in renderers that show them as code.
 
-## Start a run
+## Use the brief with another agent runner
 
 In the target OpenSwap checkout, ask an agent:
 
