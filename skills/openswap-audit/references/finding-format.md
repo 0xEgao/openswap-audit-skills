@@ -1,6 +1,6 @@
 # Audit evidence and report format
 
-Produce one Markdown brief per run. Record date, branch, `HEAD`, base/merge-base SHA, dirty-tree status, relevant commits, enabled features, CI result or “unavailable,” test backends/dependencies, reviewer assignments, and explicit exclusions. Retain private vulnerability detail under the repository security policy. A clean CI run is a statement about tests that ran, not blanket audit coverage.
+Produce one Markdown brief per run. Record date, branch, `HEAD`, base/merge-base SHA, dirty-tree status, relevant commits, enabled features, CI result or “unavailable,” test backends/dependencies, reviewer assignments, and explicit exclusions. Retain private vulnerability detail under the repository security policy. A clean CI run is a statement about tests that ran, not blanket audit coverage. Name the scope **change**, **bounded baseline**, or **release** and apply the [depth/exit gates](audit-depth.md). Record worker failures and incomplete assignments; do not silently drop them from the ledger.
 
 ## Candidate finding
 
@@ -44,4 +44,4 @@ The scenario designer returns at most a few ranked briefs and a short discarded-
 
 ## Coverage ledger
 
-Use a compact table with one row per reviewed invariant or scenario: lane, changed commit, paths, Legacy/Taproot, Core/Electrum, normal/failure/restart/reorg boundary, evidence type (read/test/inferred), result (pass/fail/blocked/unrun), and evidence pointer. Distinguish **unreviewed**, **reviewed with no finding**, **existing CI assertion**, and **new scenario executed**. End with the highest-value missing test, unresolved question, and lane to revisit in the next audit wave.
+Use a compact table with one row per reviewed invariant or scenario: lane, changed commit, paths, Legacy/Taproot, Core/Electrum, normal/failure/restart/reorg boundary, evidence type (read/test/inferred), result (pass/fail/blocked/unrun), and evidence pointer. Distinguish **unreviewed**, **reviewed with no finding**, **existing CI assertion**, and **new scenario executed**. End with the highest-value missing test, unresolved question, and lane to revisit in the next audit wave. Add a one-line completion status: **complete for stated bounded scope**, **partial**, or **blocked**, with the missing evidence. “No critical finding” is permitted only for the explicitly reviewed scope, never for unreviewed lanes.

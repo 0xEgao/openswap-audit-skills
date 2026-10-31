@@ -10,6 +10,10 @@ test("watchtower changes dispatch chain and wallet reviewers plus quality and sc
   assert.deepEqual(selectRoles(["src/watch_tower/watcher.rs"], "change"), ["E", "F", "I", "J"]);
 });
 
+test("dependency and build changes dispatch protocol, wallet, and network reviewers", () => {
+  assert.deepEqual(selectRoles(["Cargo.lock"], "change"), ["B", "E", "G", "I", "J"]);
+});
+
 test("funding replacement dispatches both peers, wallet, and recovery", () => {
   assert.deepEqual(selectRoles(["src/maker/funding_bump.rs"], "change"), ["C", "D", "E", "F", "I", "J"]);
 });
@@ -19,7 +23,7 @@ test("release audit covers all protocol lanes and Lightning when present", () =>
   assert.deepEqual(selectRoles([], "release", "", false), ["B", "C", "D", "E", "F", "G", "I", "J"]);
 });
 
-test("no diff runs a rotating P0 baseline", () => {
+test("explicit baseline selects a bounded P0 sample", () => {
   assert.deepEqual(selectRoles([], "baseline"), ["B", "E", "F", "I", "J"]);
 });
 
@@ -43,7 +47,11 @@ test("Git snapshot ignores local Pi settings and includes changed source commits
     git("tag", "baseline");
     mkdirSync(path.join(repo, ".pi"));
     writeFileSync(path.join(repo, ".pi", "settings.json"), "{}\n");
-    const baseline = buildAuditPlan(repo, "--base=baseline");
+    assert.throws(() => buildAuditPlan(repo, "--base=baseline"), /No commits or working-tree changes/);
+    const preview = buildAuditPlan(repo, "--base=baseline --plan");
+    assert.equal(preview.implicitBaseline, true);
+    assert.equal(preview.commitCount, 0);
+    const baseline = buildAuditPlan(repo, "--base=baseline --baseline");
     assert.equal(baseline.scope, "baseline");
     assert.deepEqual(baseline.paths, []);
     mkdirSync(path.join(repo, "src", "watch_tower"), { recursive: true });
@@ -55,6 +63,15 @@ test("Git snapshot ignores local Pi settings and includes changed source commits
     assert.deepEqual(change.roles, ["E", "F", "I", "J"]);
     assert.match(change.tasks.find((task) => task.role === "J").assignment, /watchtower update/);
     assert.match(change.tasks.find((task) => task.role === "F").assignment, /fn watch/);
+    for (let index = 0; index < 20; index++) {
+      writeFileSync(path.join(repo, "README.md"), `revision ${index}\n`);
+      git("add", "README.md");
+      git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", `revision ${index}`);
+    }
+    const wide = buildAuditPlan(repo, "--base=baseline --plan");
+    assert.equal(wide.commitCount, 21);
+    assert.equal(wide.rangeTooLarge, true);
+    assert.throws(() => buildAuditPlan(repo, "--base=baseline"), /range has 21 commits/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }

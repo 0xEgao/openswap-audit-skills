@@ -16,13 +16,14 @@ cd /path/to/openswap
 pi
 ```
 
-At the Pi prompt, select the configured model with `/model` if needed, then run:
+At the Pi prompt, select the configured model with `/model` if needed. Preview the intended range before launching workers. On a feature branch, compare with its base; on a clean `master` checkout, use the parent of `HEAD` to review the latest commit, then widen the range only after previewing its size:
 
 ```text
-/openswap-audit --base=origin/master Audit recent commits, including dirty changes.
+/openswap-audit --plan --base=HEAD~1
+/openswap-audit --base=HEAD~1
 ```
 
-Use `/openswap-audit --plan` to preview the base, scope, changed-path count, and roles without starting a model. Use `/openswap-audit-stop` to cancel a running reviewer wave. Use `--release` for B–H plus I/J, `--baseline` for a rotating P0 pass, or `--parallel=2` when the model backend can handle two requests. A module request such as `/openswap-audit Audit recent watchtower changes` adds that boundary to the diff-based routing.
+`--base=origin/master` on a clean `master` checkout has **zero new commits**. The command now stops instead of silently changing that request into a baseline sample. Use `/openswap-audit --baseline` for an explicit B/E/F/I/J sample, or `/openswap-audit --release` to route every applicable B–H specialist plus I/J. A release run still needs the [depth and exit gates](skills/openswap-audit/references/audit-depth.md) before its report can claim coverage. `/openswap-audit --plan` previews the base, scope, commit count, changed-path count, and roles without starting a model. The dispatcher refuses ranges over 20 commits because it cannot supply every commit to the workers in one wave; split larger histories into smaller runs. Use `/openswap-audit-stop` to cancel a running reviewer wave. Use `--parallel=2` when the model backend can handle two requests. A module request such as `/openswap-audit Audit recent watchtower changes` adds that boundary to the diff-based routing.
 
 While editing this sibling repository locally, you can load it without installing or pushing:
 
@@ -33,9 +34,9 @@ pi -e ../openswap-audit-skills
 
 To install only for the OpenSwap checkout, run `pi install --local git:github.com/0xEgao/openswap-audit-skills` there. Project-local packages load after project trust is granted. Run `pi update --extensions` to update the managed Git package. See [Pi package documentation](https://pi.dev/docs/latest/packages) for scope and update behavior.
 
-`/openswap-audit` itself captures `HEAD`, the merge base, committed and dirty paths, recent commit summaries, and a patch for the scenario designer. Its deterministic router launches the initial B–H specialists selected by changed paths and cross-module boundaries, plus I (code quality) and J (novel scenario gaps). With no changed paths it runs a B/E/F baseline; release mode runs B–G and H when the Lightning module exists. Each reviewer is a separate read-only Pi process using the selected model. They run sequentially by default for one local model backend, or up to four at a time with `--parallel=N`.
+`/openswap-audit` itself captures `HEAD`, the merge base, committed and dirty paths, recent commit summaries, and a patch for the scenario designer. Its deterministic router launches the initial B–H specialists selected by changed paths and cross-module boundaries, plus I (code quality) and J (novel scenario gaps). With no changed paths, a normal change command stops and asks for an explicit base or mode. Baseline mode samples B/E/F; release mode routes B–G and H when the Lightning module exists. Each reviewer is a separate read-only Pi process using the selected model. They run sequentially by default for one local model backend, or up to four at a time with `--parallel=N`.
 
-Only after those processes finish does the current Pi session act as **A**, the coordinator. It receives the reports, checks CI and any routing gaps, and may call `openswap_audit_agents` for extra reviewers or L to challenge serious claims. K runs only a chosen new scenario in a fresh detached worktree through `openswap_audit_scenario`; source changes must be committed so K tests the audited HEAD (the project-local `.pi/settings.json` is exempt). The worktree and patch are kept for inspection. The coordinator produces the dated audit and coverage ledger in the Pi conversation. The initial worker launch is code-driven; interpretation and optional K/L follow-ups remain evidence-driven.
+Only after those processes finish does the current Pi session act as **A**, the coordinator. It receives the reports, checks CI and any routing gaps, and may call `openswap_audit_agents` for extra reviewers or L to challenge serious claims. K runs only a chosen new scenario in a fresh detached worktree through `openswap_audit_scenario`; source changes must be committed so K tests the audited HEAD (the project-local `.pi/settings.json` is exempt). The worktree and patch are kept for inspection. The coordinator produces the dated audit and coverage ledger in the Pi conversation. It must mark worker failures, unreviewed lanes, and scenario decisions explicitly. The initial worker launch is code-driven; interpretation and optional K/L follow-ups remain evidence-driven. K runs one selected case per invocation, not every possible swap scenario.
 
 The review workers use Pi's read/search tools. K can edit and run focused regtest commands in its worktree. Pi extensions and tools run with your account's permissions; the worktree is [not an OS sandbox](https://pi.dev/docs/latest/security). Use a container or restricted account if auditing untrusted code. A selected model, reachable backend, and regtest dependencies are prerequisites for model calls and scenario execution. A missing dependency is reported as blocked, not as a passing audit.
 
@@ -111,7 +112,7 @@ The [module priority map](skills/openswap-audit/references/module-priorities.md)
 
 ```mermaid
 flowchart TD
-    Start["Choose PR, rotating baseline, or release scope"] --> Snapshot["Capture base, HEAD, dirty diff, features, CI status"]
+    Start["Choose PR, bounded baseline, or release scope"] --> Snapshot["Capture base, HEAD, dirty diff, features, CI status"]
     Snapshot --> Commits["Read commits and changed state transitions"]
     Commits --> Route["Route B-H and I by invariant"]
     Commits --> Tests["J reads nearest test bodies and assertions"]
@@ -129,14 +130,14 @@ flowchart TD
     Challenge --> Report["A publishes local audit brief"]
 ```
 
-The scenario designer should inspect recent commits **one by one**. For each changed transition it records the invariant, nearest existing test and its actual assertions, then the specific ordering, value, protocol/backend, or restart boundary still unproved. A proposed test specifies the injected event and observable transaction, UTXO, wallet state, balance/fee, and terminal outcome. The [scenario procedure](skills/openswap-audit/references/scenario-selection.md) has the worksheet and a funding-replacement example.
+The scenario designer should inspect recent commits **one by one**. For each changed transition it records the invariant, nearest existing test and its actual assertions, then the specific ordering, value, protocol/backend, or restart boundary still unproved. A proposed test specifies the injected event and observable transaction, UTXO, wallet state, balance/fee, and terminal outcome. The [scenario procedure](skills/openswap-audit/references/scenario-selection.md) has the worksheet and a funding-order example.
 
 CI at the documented OpenSwap snapshot runs default-feature integration tests in eight nextest partitions plus a separate Tor lane. Its main integration command does not enable the optional Lightning module. The designer avoids routinely rerunning those existing tests; the executor runs a narrow case when it can answer a material question. Before each audit, read the target checkout's integration-test README and CI workflow for the actual commands and feature coverage.
 
 ## Priority and cadence
 
-1. **Every substantial PR or branch:** start with newly changed fund-safety or recovery invariants, their cross-module dependencies, an independent code-quality pass, and the highest-value novel scenario briefs.
-2. **Periodic baseline rotation:** revisit a P0 invariant that recent diffs did not touch, prioritizing old gaps and assumptions that have not been challenged recently.
+1. **Every substantial PR or branch:** start with newly changed fund-safety or recovery invariants, their cross-module dependencies, an independent code-quality pass, and the highest-value novel scenario briefs. Verify the base/HEAD commit count; a clean branch at its own origin tip has no diff against that tip.
+2. **Periodic baseline:** sample B/E/F and revisit an underreviewed P0 invariant within those lanes; add C/D/G/H follow-ups when the prior ledger shows a higher-priority gap. The command does not rotate roles by itself.
 3. **Before a security-sensitive release:** cover contracts, both peer state machines, wallet/accounting, chain/recovery, and every enabled money-moving feature. Record any remaining high-impact gaps explicitly.
 
 P0 is about possible fund loss, broken atomicity, or lost recovery. Changed funding replacement, signing, wallet persistence, and watchtower behavior usually move to the first wave. Offer/fidelity/privacy and operational resilience can move up when they affect a P0 boundary. The [routing rules](skills/openswap-audit/references/module-priorities.md) give the detailed map.
@@ -159,6 +160,7 @@ The ledger distinguishes **existing CI assertion**, **reviewed without a finding
 | [skills/openswap-audit/references/agent-briefs.md](skills/openswap-audit/references/agent-briefs.md) | A-L specialist assignments |
 | [skills/openswap-audit/references/module-priorities.md](skills/openswap-audit/references/module-priorities.md) | Module priority and dispatch rules |
 | [skills/openswap-audit/references/scenario-selection.md](skills/openswap-audit/references/scenario-selection.md) | Commit-driven scenario discovery |
+| [skills/openswap-audit/references/audit-depth.md](skills/openswap-audit/references/audit-depth.md) | Scope modes, critical-risk questions, minimum reviewer evidence, and completion gates |
 | [skills/openswap-audit/references/finding-format.md](skills/openswap-audit/references/finding-format.md) | Finding, scenario, and coverage templates |
 
 All links in this README are relative to the repository and work when the repository is browsed on GitHub. Mermaid blocks provide the diagrams; the adjacent text and tables carry the same structure in renderers that show them as code.

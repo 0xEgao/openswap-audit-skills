@@ -47,6 +47,7 @@ export function parseAuditArgs(input = "") {
 
 export function rolesForPath(file) {
   const p = file.replaceAll("\\", "/").toLowerCase();
+  if (p === "cargo.toml" || p === "cargo.lock" || p === "build.rs") return ["B", "E", "G"];
   if (/funding_bump|refund_fee_bump/.test(p)) return ["C", "D", "E", "F"];
   if (/lightning/.test(p)) return ["E", "F", "H"];
   if (p.startsWith("src/watch_tower/") || p.startsWith("src/wallet/blockchain/") || p.startsWith("tests/integration/recovery/")) return ["E", "F"];
@@ -88,10 +89,19 @@ export function buildAuditPlan(repo, input = "") {
   const unstaged = pathsFrom(git(repo, ["diff", "--name-only", "-z"]));
   const untracked = pathsFrom(git(repo, ["ls-files", "--others", "--exclude-standard", "-z"]));
   const paths = [...new Set([...committed, ...staged, ...unstaged, ...untracked])].filter((file) => !file.startsWith(".pi/")).sort();
-  const scope = opts.release ? "release" : opts.baseline || paths.length === 0 ? "baseline" : "change";
+  const noDiff = paths.length === 0;
+  const implicitBaseline = noDiff && !opts.release && !opts.baseline;
+  if (implicitBaseline && !opts.planOnly) {
+    throw new Error("No commits or working-tree changes relative to the selected base. Use --base=HEAD~N to audit recent commits, --baseline for a bounded P0 sample, or --release for all applicable review lanes.");
+  }
+  const scope = opts.release ? "release" : opts.baseline || noDiff ? "baseline" : "change";
   const roles = selectRoles(paths, scope, opts.request, existsSync(path.join(repo, "src", "lightning")));
   const status = git(repo, ["status", "--short", "--untracked-files=all"]);
   const count = Number(git(repo, ["rev-list", "--count", `${mergeBase}..HEAD`]));
+  const rangeTooLarge = count > 20;
+  if (rangeTooLarge && !opts.planOnly) {
+    throw new Error(`Selected range has ${count} commits, but worker context includes at most 20. Split the range with a closer --base=REF and preview with --plan.`);
+  }
   const commits = git(repo, ["log", "--format=%h %s", "--max-count=20", `${mergeBase}..HEAD`]);
   const stat = git(repo, ["diff", "--stat", `${mergeBase}...HEAD`]);
   const context = [
@@ -100,7 +110,7 @@ export function buildAuditPlan(repo, input = "") {
     `HEAD: ${head}`,
     `Base ref: ${base}`,
     `Merge base: ${mergeBase}`,
-    `Scope: ${scope}`,
+    `Scope: ${scope}${scope === "baseline" ? " (bounded B/E/F sample; not whole-codebase coverage)" : scope === "release" ? " (all applicable reviewer lanes; execution still requires evidence)" : ""}`,
     `CI status: not queried by the dispatcher; verify against this exact HEAD`,
     `Working tree status:\n${status || "clean"}`,
     `Commits since merge base (${count}; showing at most 20):\n${commits || "none"}`,
@@ -127,11 +137,11 @@ export function buildAuditPlan(repo, input = "") {
     const focusedExcerpt = focusedPatch.length > 20_000 ? `${focusedPatch.slice(0, 20_000)}\n[Focused patch truncated; inspect source paths and ask the coordinator for more diff context.]` : focusedPatch;
     const assignment = [
       `Review ${ROLE_NAMES[role]} for this ${scope} audit. User request: ${opts.request}`,
-      `Focus paths: ${focus.slice(0, 40).join(", ") || "rotating P0 baseline"}${focus.length > 40 ? " (additional paths listed in snapshot)" : ""}.`,
+      `Focus paths: ${focus.slice(0, 40).join(", ") || "bounded P0 baseline sample"}${focus.length > 40 ? " (additional paths listed in snapshot)" : ""}.`,
       "Follow the relevant state across adjacent modules and report exact evidence, competing explanations, and coverage gaps.",
-      role === "J" ? `Compare recent changes with actual CI test assertions. Commit and dirty diffs:\n${scenarioPatch || "No source diff; inspect baseline gaps."}` : focusedExcerpt ? `Focused committed and dirty diff:\n${focusedExcerpt}` : "",
+      role === "J" ? `Compare recent changes with actual CI test assertions. Commit and dirty diffs:\n${scenarioPatch || (scope === "release" ? "No source diff; inspect release-scope P0 gaps." : "No source diff; inspect bounded baseline gaps.")}` : focusedExcerpt ? `Focused committed and dirty diff:\n${focusedExcerpt}` : "",
     ].filter(Boolean).join("\n\n");
     return { role, assignment };
   });
-  return { ...opts, repo, head, base, mergeBase, scope, paths, roles, context, tasks, status };
+  return { ...opts, repo, head, base, mergeBase, scope, paths, roles, context, tasks, status, commitCount: count, implicitBaseline, rangeTooLarge };
 }
